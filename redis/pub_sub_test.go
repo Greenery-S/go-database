@@ -1,12 +1,17 @@
-package redis_class
+package my
 
 import (
-	"context"
+	"github.com/redis/go-redis/v9"
+	"golang.org/x/net/context"
 	"testing"
 )
 
 func TestPubSub(t *testing.T) {
-	pubSub(context.Background(), client)
+	client := redis.NewClient(&redis.Options{
+		Addr:     "127.0.0.1:6379",
+		Password: "123456",
+		DB:       0,
+	})
+	c := context.Background()
+	pubsub(c, client)
 }
-
-// go test -v ./database/redis -run=^TestPubSub$ -count=1

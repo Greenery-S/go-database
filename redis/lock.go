@@ -1,40 +1,66 @@
-package redis_class
+package my
 
 import (
 	"context"
 	"fmt"
+	"github.com/redis/go-redis/v9"
+	"math/rand"
 	"sync"
 	"time"
-
-	"github.com/redis/go-redis/v9"
 )
 
-// TryLock 尝试获得分布式锁，成功返回true，失败返回false
 func TryLock(rc *redis.Client, key string, expire time.Duration) bool {
-	cmd := rc.SetNX(context.Background(), key, "value随意", expire) //SetNX如果key不存在则返回true，写入key，并设置过期时间
-	if cmd.Err() != nil {
-		return false
-	} else {
+	cmd := rc.SetNX(context.Background(), key, "anything is ok", expire)
+	if err := cmd.Err(); err == nil {
 		return cmd.Val()
+	} else {
+		return false
 	}
 }
 
-// ReleaseLock 释放分布式锁
 func ReleaseLock(rc *redis.Client, key string) {
 	rc.Del(context.Background(), key)
 }
 
 func LockRace(client *redis.Client) {
-	key := "iPhone秒杀-共3部-第2部"      //模拟：谁抢到锁，谁就能抢到这部iPhone
-	defer ReleaseLock(client, key) //函数结束时删除redis上的key，不影响下次运行演示
-	const P = 100                  //100个人来抢
+	key := "iPhone 2/3"
+	defer ReleaseLock(client, key)
+	const P = 100
 	wg := sync.WaitGroup{}
 	wg.Add(P)
 	for i := 0; i < P; i++ {
 		go func(i int) {
 			defer wg.Done()
-			if TryLock(client, key, time.Hour) { //秒杀活动只持续10分钟，1小时后自动把key从redis上删掉（节约redis内存），不用再调用ReleaseLock()函数
-				fmt.Printf("协程%d抢到锁\n", i)
+			if TryLock(client, key, time.Hour) {
+				fmt.Printf("%d got the iPhone!!\n", i)
+			} else {
+				fmt.Println(i, "is locked")
+			}
+		}(i)
+	}
+	wg.Wait()
+}
+
+func LockRace2(client *redis.Client, storage int) {
+	keyLock := "lock"
+	keyStorage := "store"
+	client.Set(context.Background(), keyStorage, storage, 0)
+	defer ReleaseLock(client, keyLock)
+	defer client.Del(context.Background(), keyStorage)
+
+	const P = 1000
+	wg := sync.WaitGroup{}
+	wg.Add(P)
+	start := time.Now()
+	for i := 0; i < P; i++ {
+		go func(i int) {
+			defer wg.Done()
+			time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond)
+			if TryLock(client, keyLock, 0) {
+				if v := client.IncrBy(context.Background(), keyStorage, -1).Val(); v >= 0 {
+					fmt.Printf("%d gets the No.%d iPhone! Use %v!\n", i, v+1, time.Now().Sub(start))
+				}
+				ReleaseLock(client, keyLock)
 			}
 		}(i)
 	}
