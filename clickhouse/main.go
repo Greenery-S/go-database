@@ -27,7 +27,7 @@ type userInfo struct {
 // 批量导入某天注册的用户数据（通常是每天凌晨，从MySQL向ClickHouse导一批数据）
 func batchImport(conn *sql.DB, day time.Time) {
 	day = time.Unix(86400*day.Unix()/86400, 0) //归到0点
-	dayStr := day.Format("2016-01-02")
+	dayStr := day.Format("2006-01-02")
 
 	tx, err := conn.Begin() //开始事务
 	if err != nil {
@@ -86,8 +86,8 @@ func query(conn *sql.DB, begin, end time.Time) []int {
 	sql := "select date(create_time) as date,uniq(user_id) from user where date>='" + begin.Format("2016-01-02") + "' and date<'" + end.Format("2016-01-02") + "' group by date order by date"
 	if rows, err := conn.Query(sql); err == nil {
 		for rows.Next() {
-			var day time.Time
-			var count int
+			var day time.Time // 存储查询到的 `date(create_time) as date`
+			var count int     // 存储查询到的`uniq(user_id)`
 			if err := rows.Scan(&day, &count); err == nil {
 				rect = append(rect, count)
 			} else {
